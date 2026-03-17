@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Endonutri platform.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user's unique identifier (Firebase Auth UID)."
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "telegram_id": {
+          "type": "string",
+          "description": "The user's Telegram ID for bot interaction."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"],
+          "description": "The user's role in the system."
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["free", "premium"],
+          "description": "The user's subscription plan."
+        },
+        "stripeCustomerId": {
+          "type": "string",
+          "description": "The user's Stripe Customer ID."
+        },
+        "subscriptionStatus": {
+          "type": "string",
+          "description": "The user's Stripe Subscription Status."
+        },
+        "subscriptionId": {
+          "type": "string",
+          "description": "The user's Stripe Subscription ID."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the user was created."
+        }
+      },
+      "required": ["uid", "role", "createdAt"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "The user's health and dietary profile.",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The user's unique identifier."
+        },
+        "symptoms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of endometriosis symptoms."
+        },
+        "restrictions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of dietary restrictions."
+        },
+        "goals": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of health and nutrition goals."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the profile was last updated."
+        }
+      },
+      "required": ["user_id", "symptoms", "restrictions", "goals", "updatedAt"]
+    },
+    "MealPlan": {
+      "title": "Meal Plan",
+      "description": "A generated weekly meal plan.",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The user's unique identifier."
+        },
+        "weekly_plan": {
+          "type": "string",
+          "description": "The generated weekly meal plan (JSON stringified)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the meal plan was generated."
+        }
+      },
+      "required": ["user_id", "weekly_plan", "createdAt"]
+    },
+    "GroceryList": {
+      "title": "Grocery List",
+      "description": "A generated grocery shopping list.",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The user's unique identifier."
+        },
+        "categorized_items": {
+          "type": "string",
+          "description": "The generated grocery list items (JSON stringified)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the grocery list was generated."
+        }
+      },
+      "required": ["user_id", "categorized_items", "createdAt"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "System interaction logs.",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The user's unique identifier (if applicable)."
+        },
+        "action": {
+          "type": "string",
+          "description": "The action performed."
+        },
+        "details": {
+          "type": "string",
+          "description": "Details of the interaction."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp of the log."
+        }
+      },
+      "required": ["action", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user accounts."
+    },
+    "/profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "Stores user health profiles."
+    },
+    "/meal_plans/{mealPlanId}": {
+      "schema": { "$ref": "#/entities/MealPlan" },
+      "description": "Stores generated meal plans."
+    },
+    "/grocery_lists/{groceryListId}": {
+      "schema": { "$ref": "#/entities/GroceryList" },
+      "description": "Stores generated grocery lists."
+    },
+    "/logs/{logId}": {
+      "schema": { "$ref": "#/entities/Log" },
+      "description": "Stores system logs."
+    }
+  }
+}

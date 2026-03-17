@@ -1,0 +1,233 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (matches auth.uid)
+    // Fields:
+    //   - uid: string (required, matches auth.uid)
+    //   - name: string (optional, max 100 chars)
+    //   - email: string (optional, valid email format)
+    //   - telegram_id: string (optional, max 50 chars)
+    //   - role: string (required, 'user' or 'admin')
+    //   - plan: string (optional, 'free' or 'premium')
+    //   - stripeCustomerId: string (optional, max 100 chars)
+    //   - subscriptionStatus: string (optional, max 50 chars)
+    //   - subscriptionId: string (optional, max 100 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: profiles
+    // Document ID: profileId (matches auth.uid for 1:1 mapping)
+    // Fields:
+    //   - user_id: string (required, matches auth.uid)
+    //   - symptoms: list of strings (required, max 20 items, max 100 chars each)
+    //   - restrictions: list of strings (required, max 20 items, max 100 chars each)
+    //   - goals: list of strings (required, max 20 items, max 100 chars each)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: meal_plans
+    // Document ID: auto-generated
+    // Fields:
+    //   - user_id: string (required, matches auth.uid)
+    //   - weekly_plan: string (required, JSON string, max 50000 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: grocery_lists
+    // Document ID: auto-generated
+    // Fields:
+    //   - user_id: string (required, matches auth.uid)
+    //   - categorized_items: string (required, JSON string, max 50000 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: logs
+    // Document ID: auto-generated
+    // Fields:
+    //   - user_id: string (optional, matches auth.uid if present)
+    //   - action: string (required, max 100 chars)
+    //   - details: string (optional, max 5000 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.user_id;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mateusalvesbassanelli@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidList(listField, maxSize, maxItemSize) {
+      let list = request.resource.data[listField];
+      return list is list && list.size() <= maxSize;
+      // Note: Firestore rules don't easily support deep array inspection for size of each string without a complex workaround, 
+      // but we ensure it's a list and bounded in size.
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasRequiredFields(['uid', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['user', 'admin'] &&
+             data.createdAt is timestamp &&
+             isValidOptionalString('name', 1, 100) &&
+             (!( 'email' in data ) || isValidEmail(data.email)) &&
+             isValidOptionalString('telegram_id', 1, 50) &&
+             (!( 'plan' in data ) || data.plan in ['free', 'premium']) &&
+             isValidOptionalString('stripeCustomerId', 1, 100) &&
+             isValidOptionalString('subscriptionStatus', 1, 50) &&
+             isValidOptionalString('subscriptionId', 1, 100);
+    }
+
+    function isValidProfile() {
+      let data = request.resource.data;
+      return hasRequiredFields(['user_id', 'symptoms', 'restrictions', 'goals', 'updatedAt']) &&
+             data.user_id == request.auth.uid &&
+             isValidList('symptoms', 20, 100) &&
+             isValidList('restrictions', 20, 100) &&
+             isValidList('goals', 20, 100) &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidMealPlan() {
+      let data = request.resource.data;
+      return hasRequiredFields(['user_id', 'weekly_plan', 'createdAt']) &&
+             data.user_id == request.auth.uid &&
+             validStringLength('weekly_plan', 1, 50000) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidGroceryList() {
+      let data = request.resource.data;
+      return hasRequiredFields(['user_id', 'categorized_items', 'createdAt']) &&
+             data.user_id == request.auth.uid &&
+             validStringLength('categorized_items', 1, 50000) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidLog() {
+      let data = request.resource.data;
+      return hasRequiredFields(['action', 'createdAt']) &&
+             validStringLength('action', 1, 100) &&
+             isValidOptionalString('details', 1, 5000) &&
+             data.createdAt is timestamp &&
+             (!( 'user_id' in data ) || data.user_id == request.auth.uid);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidUser() && 
+                       (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidUser() && 
+                       uidNotModified() &&
+                       areImmutableFieldsUnchanged(['createdAt']) &&
+                       (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /profiles/{profileId} {
+      allow read: if isOwner(profileId) || isAdmin();
+      allow create: if isAuthenticated() && 
+                       isOwner(profileId) && 
+                       isValidProfile();
+      allow update: if isAuthenticated() && 
+                       isOwner(profileId) && 
+                       isValidProfile() &&
+                       areImmutableFieldsUnchanged(['user_id']);
+      allow delete: if isOwner(profileId) || isAdmin();
+    }
+
+    match /meal_plans/{mealPlanId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && 
+                       isValidMealPlan();
+      allow update: if isAuthenticated() && 
+                       isDocOwner() && 
+                       isValidMealPlan() &&
+                       areImmutableFieldsUnchanged(['user_id', 'createdAt']);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /grocery_lists/{groceryListId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && 
+                       isValidGroceryList();
+      allow update: if isAuthenticated() && 
+                       isDocOwner() && 
+                       isValidGroceryList() &&
+                       areImmutableFieldsUnchanged(['user_id', 'createdAt']);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidLog();
+      allow update: if false; // Logs are append-only
+      allow delete: if isAdmin();
+    }
+  }
+}
